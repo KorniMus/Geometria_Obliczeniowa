@@ -1,1 +1,1 @@
-# NiceThings
+# Repo na projekty na studia
