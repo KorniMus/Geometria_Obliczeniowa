@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sprawdzanie punktu</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script> <!-- Dodanie Chart.js -->
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+        }
+
+        #myChart {
+            max-width: 300px;  /* Szerokość maksymalna wykresu */
+            max-height: 300px; /* Wysokość maksymalna wykresu */
+            margin: 0 auto;    /* Wycentrowanie wykresu */
+        }
+
+        .form-group {
+            margin-bottom: 10px;
+        }
+
+        label {
+            display: inline-block;
+            width: 100px;
+            text-align: right;
+            padding-right: 10px;
+        }
+
+        input[type="number"] {
+            width: 100px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Sprawdzanie położenia punktu względem odcinka</h1>
+
+    <button id="losujButton">Losuj współrzędne</button>
+    <p id="punkty"></p>
+
+    <div>
+        <h2>Lub wprowadź własne dane:</h2>
+        <div class="form-group">
+        <label for="Ax">Punkt A (x):</label>
+        <input type="number" id="Ax" value="6123456.123" step="any">
+        <label for="Ay">Punkt A (y):</label>
+        <input type="number" id="Ay" value="3123456.123" step="any">
+        </div>
+        <div class="form-group">
+            <label for="Bx">Punkt B (x):</label>
+            <input type="number" id="Bx" value="6123459.123" step="any">
+            <label for="By">Punkt B (y):</label>
+            <input type="number" id="By" value="3123458.123" step="any">
+        </div>
+        <div class="form-group">
+            <label for="Px">Punkt P (x):</label>
+            <input type="number" id="Px" value="6123457.123" step="any">
+            <label for="Py">Punkt P (y):</label>
+            <input type="number" id="Py" value="3123458.123" step="any">
+        </div>
+
+        <button id="submitCustomData">Sprawdź własne dane</button>
+    </div>
+
+    <div id="checkButtonContainer">
+        <button id="sprawdzButton" style="display:none;">Sprawdź punkt</button>
+    </div>
+
+    <h2>Sprawdź położenie punktu P względem odcinka AB</h2>
+    <p id="result"></p>
+
+    <!-- Wyniki wyznacznika i iloczynu wektorowego -->
+    <h3>Wynik wyznacznika: <span id="wyznacznik"></span></h3>
+    <h3>Iloczyn wektorowy: <span id="iloczyn"></span></h3>
+    <h3>Różnica: <span id="roznica"></span></h3>
+
+    <!-- Miejsce na wykres -->
+    <canvas id="myChart" width="400" height="400"></canvas>
+
+    <script>
+        const losujButton = document.getElementById('losujButton');
+        const sprawdzButton = document.getElementById('sprawdzButton');
+        const punktyElement = document.getElementById('punkty');
+        const resultElement = document.getElementById('result');
+        const wyznacznikElement = document.getElementById('wyznacznik');
+        const iloczynElement = document.getElementById('iloczyn');
+        const roznicaElement = document.getElementById('roznica');
+        const ctx = document.getElementById('myChart').getContext('2d');
+        let chart; // Globalna zmienna dla wykresu
+
+        // Funkcja do losowania współrzędnych
+        losujButton.addEventListener('click', async () => {
+            const response = await fetch('/losuj-wspolrzedne');
+            const data = await response.json();
+            punktyElement.textContent = `A: ${data.A}, B: ${data.B}, P: ${data.P}`;
+            sprawdzButton.style.display = 'inline'; // Pokaż przycisk sprawdzania punktu
+
+            // Przechowywanie współrzędnych do późniejszego użycia
+            window.punkty = data;
+        });
+
+        // Funkcja do sprawdzania punktu dla losowanych współrzędnych
+        sprawdzButton.addEventListener('click', async () => {
+            await sprawdzPunkt(window.punkty);
+        });
+
+        // Funkcja do sprawdzania punktu dla wprowadzonych danych
+        document.getElementById('submitCustomData').addEventListener('click', async () => {
+            const A = [parseFloat(document.getElementById('Ax').value), parseFloat(document.getElementById('Ay').value)];
+            const B = [parseFloat(document.getElementById('Bx').value), parseFloat(document.getElementById('By').value)];
+            const P = [parseFloat(document.getElementById('Px').value), parseFloat(document.getElementById('Py').value)];
+
+            const customData = { A, B, P };
+            await sprawdzPunkt(customData);
+        });
+
+        // Funkcja do sprawdzania punktu (wspólna dla obu przypadków)
+        async function sprawdzPunkt(data) {
+            const response = await fetch('/sprawdz-punkt', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(data),
+            });
+            const result = await response.json();
+
+            // Wyświetlanie wyników
+            resultElement.textContent = result.message;
+            wyznacznikElement.textContent = result.wyznacznik_macierzy;
+            iloczynElement.textContent = result.iloczyn_wektorowy;
+            roznicaElement.textContent = result.roznica;
+
+            // Aktualizacja lub stworzenie nowego wykresu
+            if (chart) {
+                chart.destroy(); // Usunięcie starego wykresu
+            }
+
+            chart = new Chart(ctx, {
+                type: 'scatter',
+                data: {
+                    datasets: [
+                        {
+                            label: 'Punkty',
+                            data: [
+                                {x: data.A[0], y: data.A[1], label: 'A'},
+                                {x: data.B[0], y: data.B[1], label: 'B'},
+                                {x: data.P[0], y: data.P[1], label: 'P'}
+                            ],
+                            backgroundColor: 'rgb(255, 99, 132)',
+                            pointRadius: 5, // Promień punktów
+                            showLine: false // Wyświetlanie tylko punktów, bez linii w tej serii
+                        },
+                        {
+                            label: 'Linia AB',
+                            data: [
+                                {x: data.A[0], y: data.A[1]},
+                                {x: data.B[0], y: data.B[1]}
+                            ],
+                            borderColor: 'rgb(54, 162, 235)',
+                            backgroundColor: 'transparent',
+                            type: 'line', // To jest linia
+                            fill: false, // Bez wypełnienia pod linią
+                            pointRadius: 0 // Bez punktów na linii
+                        }
+                    ]
+                },
+                options: {
+                    scales: {
+                        x: {
+                            type: 'linear',
+                            position: 'bottom'
+                        }
+                    },
+                    plugins: {
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    let label = context.dataset.data[context.dataIndex].label || '';
+                                    if (label) {
+                                        label += ': ';
+                                    }
+                                    label += `(${context.raw.x}, ${context.raw.y})`;
+                                    return label;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+    </script>
+</body>
+</html>
